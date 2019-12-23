@@ -374,6 +374,7 @@ class Compaction {
   Version* input_version_;
   VersionEdit edit_;
 
+  // inputs_[0] 是level
   // Each compaction reads inputs from "level_" and "level_+1"
   std::vector<FileMetaData*> inputs_[2];      // The two sets of inputs
 

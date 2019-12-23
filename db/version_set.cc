@@ -379,6 +379,7 @@ Status Version::Get(const ReadOptions& options,
     } else {
       // Binary search to find earliest index whose largest key >= ikey.
       // 别的层次的文件列表，因为是有序的，所以采用二分查找来找到该
+      // files_[level] 是根据key的大小有序排列
       uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
       // 没有找到文件
       if (index >= num_files) {
@@ -424,6 +425,7 @@ Status Version::Get(const ReadOptions& options,
       }
       switch (saver.state) {
         case kNotFound:
+          // 如果没有找到该key，那么就有可能让该文件进行compaction
           break;      // Keep searching in other files
         case kFound:
           return s;
@@ -721,6 +723,7 @@ class VersionSet::Builder {
       // conservative and allow approximately one seek for every 16KB
       // of data before triggering a compaction.
       f->allowed_seeks = (f->file_size / 16384);
+      // 至少100次
       if (f->allowed_seeks < 100) f->allowed_seeks = 100;
 
       levels_[level].deleted_files.erase(f->number);
@@ -1339,7 +1342,7 @@ Compaction* VersionSet::PickCompaction() {
       FileMetaData* f = current_->files_[level][i];
       // 如果没有记录下一次需要compact的文件
       if (compact_pointer_[level].empty() ||
-          // 如果当前的文件key最大大于需要compact的键
+          // 如果当前的文件key最大的key需要compact的键
           // 那么该文件将要返回
           icmp_.Compare(f->largest.Encode(), compact_pointer_[level]) > 0) {
         c->inputs_[0].push_back(f);
@@ -1385,10 +1388,11 @@ Compaction* VersionSet::PickCompaction() {
 void VersionSet::SetupOtherInputs(Compaction* c) {
   const int level = c->level();
   InternalKey smallest, largest;
-  // 获取该level文件的最大和最小key
+  // 获取需要compact文件的最大和最小key
   GetRange(c->inputs_[0], &smallest, &largest);
 
-  // 将level层与level+1层重叠的文件找来，放到c->inputs_[1]中
+  // 记住inputs_[0]只有一个文件
+  // 将level+1层中所有与inputs_[0]重叠的key，放到c->inputs_[1]中
   current_->GetOverlappingInputs(level+1, &smallest, &largest, &c->inputs_[1]);
 
   // Get entire range covered by compaction
@@ -1401,6 +1405,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   if (!c->inputs_[1].empty()) {
     // 获取有key有重叠的部分文件列表放到expand0中
     std::vector<FileMetaData*> expanded0;
+    // 获取level层重叠的key的文件列表，放到expand0中
     current_->GetOverlappingInputs(level, &all_start, &all_limit, &expanded0);
     const int64_t inputs0_size = TotalFileSize(c->inputs_[0]);
     const int64_t inputs1_size = TotalFileSize(c->inputs_[1]);
