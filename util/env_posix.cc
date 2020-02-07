@@ -107,17 +107,21 @@ class PosixSequentialFile final : public SequentialFile {
       : fd_(fd), filename_(filename) {}
   ~PosixSequentialFile() override { close(fd_); }
 
+  // 顺序读写
   Status Read(size_t n, Slice* result, char* scratch) override {
     Status status;
     while (true) {
+      // 开始的指针
       ::ssize_t read_size = ::read(fd_, scratch, n);
       if (read_size < 0) {  // Read error.
+        // 继续读
         if (errno == EINTR) {
           continue;  // Retry
         }
         status = PosixError(filename_, errno);
         break;
       }
+      // 直接返回slice
       *result = Slice(scratch, read_size);
       break;
     }
@@ -493,6 +497,7 @@ class PosixEnv : public Env {
   // 顺序文件的实现
   Status NewSequentialFile(const std::string& filename,
                            SequentialFile** result) override {
+    // 打开文件
     int fd = ::open(filename.c_str(), O_RDONLY);
     if (fd < 0) {
       *result = nullptr;
@@ -885,6 +890,7 @@ void EnvPosixTestHelper::SetReadOnlyMMapLimit(int limit) {
   g_mmap_limit = limit;
 }
 
+// 默认使用Posix环境
 Env* Env::Default() {
   static PosixDefaultEnv env_container;
   return env_container.env();
